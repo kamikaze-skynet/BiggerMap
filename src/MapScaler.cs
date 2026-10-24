@@ -53,14 +53,15 @@ internal static class MapScaler
         try
         {
             float k = Sync.Scale;
-            if (!Sync.Enabled || k <= 1.01f) return;
             var variant = __instance.GetActiveVariant();
             if (variant == null) { Plugin.Log.LogWarning("No active map layout found."); return; }
+            if (!Sync.Enabled || k <= 1.01f) { TerrainStretch.Restore(variant.transform); return; }
 
             var sw = Stopwatch.StartNew();
             standIns = missingDonors = 0;
             CollectDonors(__instance.transform);
             int moved = Spread(variant.transform, k);
+            TerrainStretch.Apply(variant.transform, k);
             ScaleConfiners(variant.transform, k);
             ScaleSpawnAreas(variant, k);
             Sync.AppliedScale = k;

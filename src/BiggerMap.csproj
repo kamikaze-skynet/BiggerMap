@@ -26,7 +26,7 @@
 
   <ItemGroup>
     <Reference Include="$(BepInExDir)\core\*.dll" Private="false" />
-    <Reference Include="$(BepInExDir)\interop\*.dll" Private="false" />
+    <Reference Include="$(BepInExDir)\interop\*.dll" Exclude="$(BepInExDir)\interop\UnityEngine.dll" Private="false" />
   </ItemGroup>
 
   <Target Name="CopyToPlugins" AfterTargets="Build" Condition="'$(CopyToPlugins)' == 'true'">

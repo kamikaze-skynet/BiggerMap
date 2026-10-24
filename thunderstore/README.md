@@ -7,7 +7,7 @@ When a realm loads, its layout spreads out from the centre:
 - The border ring moves out. Copies of its pieces fill the gaps that opens up.
 - Rocks, trees, props and the scenery behind the border move out. They keep their size; only their distance from the centre changes.
 - Objective and artifact spawn points move out too, so objectives end up further apart.
-- The invisible floor is widened. Grass and flowers get extra copies so the bigger ground doesn't look bare.
+- The ground itself (the terrain's hills) is stretched outward to match, and the invisible floor is widened. Grass and flowers get extra copies so the bigger ground doesn't look bare.
 - Enemy pathing (the navigation mesh) is rebuilt for the new layout, so enemies can chase you everywhere.
 
 **Everyone needs the mod.** The host's size is used for everyone: the host sends it to players every second, lobby included. If the host doesn't have the mod, the map stays normal for everyone.

@@ -1,3 +1,8 @@
+## 0.9.4
+- The invisible edge now follows the border's real shape. It stands right against the inner face of the border rocks and only bridges the gaps; before, it was a circle at the border's closest point and cut off up to 20 m of playable ground.
+- Picks the actual border to follow, so a ring of rocks or trees inside the arena can't be mistaken for it.
+- Fixed 'No available candidates found around position in the grid' errors when players are in the outer part of the bigger map. The game's objective-placement grid doesn't reach that far, so the request is kept inside it.
+
 ## 0.9.3
 - Players and enemies can no longer slip out of the bigger arena. An invisible wall runs just inside the moved border, and enemy pathing only covers the area inside it.
 - Border gaps are filled more reliably on layouts where a few border pieces sit further in.

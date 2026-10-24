@@ -159,7 +159,7 @@ internal static class MapScaler
         // spread but not copied.
         var outer = leaves.FindAll(l => Radius(root, l) / k >= RingMinRadius);
         bool ring = outer.Count >= 8 && outer.Count >= leaves.Count * 0.7f;
-        if (ring) Wall.Offer(root, outer);
+        if (ring) Wall.Offer(root, container, outer);
         if (!IsScenery(container, leaves)) return moved; // spawn points, props and the like are never copied
         if (Plugin.FillGaps.Value && ring) moved += FillRing(root, outer, k);
         else if (Plugin.FillGrass.Value && leaves.Count >= DenseCount && !HasColliders(leaves)) moved += Thicken(root, leaves, k);
@@ -383,7 +383,7 @@ internal static class MapScaler
                     // Only build inside the invisible edge (plus a little), not over the whole stretched ground.
                     var t = s.transform;
                     var ls = t.lossyScale;
-                    float w = 2f * Wall.Radius + 10f;
+                    float w = 2f * Wall.Radius + 12f;
                     var localCentre = t.InverseTransformPoint(Wall.Centre);
                     s.collectObjects = CollectObjects.Volume;
                     s.center = new Vector3(localCentre.x, 0f, localCentre.z);

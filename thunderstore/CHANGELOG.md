@@ -1,3 +1,7 @@
+## 0.9.3
+- Players and enemies can no longer slip out of the bigger arena. An invisible wall runs just inside the moved border, and enemy pathing only covers the area inside it.
+- Border gaps are filled more reliably on layouts where a few border pieces sit further in.
+
 ## 0.9.2
 - Fixed a crash when a realm loads (0.9.1). The ground is now stretched by widening the terrain itself (hills and ground textures together), which uses the game engine's normal settings.
 

@@ -60,7 +60,9 @@ internal static class MapScaler
             var sw = Stopwatch.StartNew();
             standIns = missingDonors = 0;
             CollectDonors(__instance.transform);
+            Wall.Reset();
             int moved = Spread(variant.transform, k);
+            if (Plugin.InvisibleEdge.Value) Wall.Build(variant.transform);
             TerrainStretch.Apply(variant.transform, k);
             ScaleConfiners(variant.transform, k);
             ScaleSpawnAreas(variant, k);
@@ -153,10 +155,13 @@ internal static class MapScaler
         }
 
         if (leaves.Count == 0) return moved;
-        float minR = float.MaxValue;
-        foreach (var l in leaves) minR = Mathf.Min(minR, Radius(root, l) / k);
+        // A ring: most of its pieces sit far out (the border, the scenery band behind it). Inner stragglers are
+        // spread but not copied.
+        var outer = leaves.FindAll(l => Radius(root, l) / k >= RingMinRadius);
+        bool ring = outer.Count >= 8 && outer.Count >= leaves.Count * 0.7f;
+        if (ring) Wall.Offer(root, outer);
         if (!IsScenery(container, leaves)) return moved; // spawn points, props and the like are never copied
-        if (Plugin.FillGaps.Value && leaves.Count >= 8 && minR >= RingMinRadius) moved += FillRing(root, leaves, k);
+        if (Plugin.FillGaps.Value && ring) moved += FillRing(root, outer, k);
         else if (Plugin.FillGrass.Value && leaves.Count >= DenseCount && !HasColliders(leaves)) moved += Thicken(root, leaves, k);
         return moved;
     }
@@ -373,7 +378,18 @@ internal static class MapScaler
             foreach (var s in surfaces)
             {
                 var sw = Stopwatch.StartNew();
-                if (s.collectObjects == CollectObjects.Volume)
+                if (Wall.Built)
+                {
+                    // Only build inside the invisible edge (plus a little), not over the whole stretched ground.
+                    var t = s.transform;
+                    var ls = t.lossyScale;
+                    float w = 2f * Wall.Radius + 10f;
+                    var localCentre = t.InverseTransformPoint(Wall.Centre);
+                    s.collectObjects = CollectObjects.Volume;
+                    s.center = new Vector3(localCentre.x, 0f, localCentre.z);
+                    s.size = new Vector3(w / Mathf.Max(0.01f, Mathf.Abs(ls.x)), 80f / Mathf.Max(0.01f, Mathf.Abs(ls.y)), w / Mathf.Max(0.01f, Mathf.Abs(ls.z)));
+                }
+                else if (s.collectObjects == CollectObjects.Volume)
                 {
                     var z = s.size; var c = s.center;
                     s.size = new Vector3(z.x * k + 10f, z.y, z.z * k + 10f);

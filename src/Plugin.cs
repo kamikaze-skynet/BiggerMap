@@ -15,7 +15,7 @@ public class Plugin : BasePlugin
 {
     public const string Guid = "girthy_mods.BiggerMap";
     public const string Name = "BiggerMap";
-    public const string Version = "0.9.2";
+    public const string Version = "0.9.3";
 
     internal const float MaxScale = 1.8f; // past this the scenery leaves the realm's ground
 
@@ -27,6 +27,7 @@ public class Plugin : BasePlugin
     internal static ConfigEntry<bool> FillGrass;
     internal static ConfigEntry<int> MaxGrassCopies;
     internal static ConfigEntry<bool> RebuildNavMesh;
+    internal static ConfigEntry<bool> InvisibleEdge;
 
     public override void Load()
     {
@@ -40,6 +41,8 @@ public class Plugin : BasePlugin
         MaxGrassCopies = Config.Bind("Map", "MaxGrassCopies", 2,
             new ConfigDescription("Most extra copies of each grass field (more copies = more objects to draw).", new AcceptableValueRange<int>(0, 3)));
         RebuildNavMesh = Config.Bind("Map", "RebuildNavigation", true, "Rebuild the enemies' navigation for the new layout (needed for enemies to reach the outer area).");
+
+        InvisibleEdge = Config.Bind("Map", "InvisibleEdge", true, "Add an invisible wall just inside the moved border so players and enemies can't slip out through gaps.");
 
         var harmony = new Harmony(Guid);
         harmony.PatchAll(typeof(MapScaler));

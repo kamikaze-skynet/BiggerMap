@@ -223,12 +223,35 @@ internal static class GridMap
 
     [HarmonyPatch(typeof(MapPositionProvider), nameof(MapPositionProvider.GetRandomPosition), new[] { typeof(Vector3), typeof(float), typeof(float) })]
     [HarmonyPrefix]
-    private static void Around_Prefix(ref Vector3 aroundWorldPosition, ref float minDistance, ref float maxDistance)
+    private static void Around_Prefix(MapPositionProvider __instance, ref Vector3 aroundWorldPosition, ref float minDistance, ref float maxDistance)
     {
         if (!Active(out float k)) return;
         aroundWorldPosition = ToGrid(aroundWorldPosition, k);
         minDistance /= k;
         maxDistance /= k;
+        // Near the edge or tucked against rocks a small search can still find no free cell; then the game logs an
+        // error and picks a spot anywhere on the map. Widen the search and lean it towards the middle instead.
+        try
+        {
+            if (Count(__instance, aroundWorldPosition, minDistance, maxDistance) > 0) return;
+            var middle = Wall.Built ? ToGrid(Wall.Centre, k) : Root.position;
+            for (int i = 1; i <= 4; i++)
+            {
+                var p = Vector3.Lerp(aroundWorldPosition, new Vector3(middle.x, aroundWorldPosition.y, middle.z), 0.15f * i);
+                float max = maxDistance * (1f + 0.5f * i) + 2f * i;
+                if (Count(__instance, p, minDistance, max) == 0) continue;
+                aroundWorldPosition = p;
+                maxDistance = max;
+                return;
+            }
+        }
+        catch { }
+    }
+
+    private static int Count(MapPositionProvider m, Vector3 around, float min, float max)
+    {
+        var list = m.FindAvailablePositions(around, min, max);
+        return list == null ? 0 : list.Count;
     }
 
     [HarmonyPatch(typeof(MapPositionProvider), nameof(MapPositionProvider.GetRandomPosition), new[] { typeof(Vector3), typeof(float), typeof(float) })]

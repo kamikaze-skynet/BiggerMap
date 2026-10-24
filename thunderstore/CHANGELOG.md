@@ -1,3 +1,6 @@
+## 0.9.8
+- When a search for a free spot near a player finds nothing (near the edge or against rocks), it's widened and nudged towards the middle instead of failing. That stops the remaining "No available candidates found around position in the grid" errors, and the thing lands near the player instead of anywhere on the map.
+
 ## 0.9.7
 - **No more invisible walls inside the map.** After spreading, every solid obstacle is checked from above: if most of it has nothing visible there (a merged rock that couldn't be replaced, a collision-only blocker whose visible parts spread apart, a leftover blocker around the original smaller arena), it's switched off. The ground, hazards, objectives and other gameplay objects are never touched. If a realm looks wrong to the check (too many pieces would go), it leaves everything alone and says so in the log. New setting `Map.RemoveInvisibleBlockers` (on).
 

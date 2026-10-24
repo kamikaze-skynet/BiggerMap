@@ -63,6 +63,15 @@ internal static class MapScaler
             Wall.Reset();
             int moved = Spread(variant.transform, k);
             GridMap.Root = variant.transform;
+            if (Plugin.RemoveInvisibleBlockers.Value)
+            {
+                var layers = new HashSet<int>();
+                for (int i = 0; i < 32; i++)
+                    try { if (LayerMask.LayerToName(i) == "Obstacles") layers.Add(i); } catch { }
+                int border = Wall.BorderLayer();
+                if (border >= 0) layers.Add(border);
+                Blockers.Clean(__instance.transform, variant.transform, layers);
+            }
             if (Plugin.InvisibleEdge.Value) Wall.Build(variant.transform);
             TerrainStretch.Apply(variant.transform, k);
             ScaleConfiners(variant.transform, k);

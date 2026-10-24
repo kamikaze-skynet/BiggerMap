@@ -56,6 +56,19 @@ internal static class Wall
         return best;
     }
 
+    /// <summary>The layer the border's colliders are on (the realm's obstacle layer), -1 if unknown.</summary>
+    internal static int BorderLayer()
+    {
+        var b = PickBorder();
+        if (b == null) return -1;
+        foreach (var l in b.Leaves)
+        {
+            var c = l.GetComponentInChildren<Collider>(true);
+            if (c != null && !c.isTrigger) return c.gameObject.layer;
+        }
+        return -1;
+    }
+
     internal static void Build(Transform root)
     {
         Built = false;
@@ -66,7 +79,7 @@ internal static class Wall
         var cols = new List<Collider>();
         foreach (var l in border.Leaves)
             foreach (var c in l.GetComponentsInChildren<Collider>(true))
-                if (c != null && !c.isTrigger) cols.Add(c);
+                if (c != null && c.enabled && !c.isTrigger) cols.Add(c);
         if (cols.Count == 0) return;
 
         // The pieces were just moved; colliders only follow their transforms after a physics sync. (Before 0.9.6 the

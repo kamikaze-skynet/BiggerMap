@@ -21,12 +21,13 @@ When a realm loads, its layout spreads out from the centre:
 | `Map.FillBorderGaps` | `true` | Adds border pieces so the bigger ring is closed. |
 | `Map.FillGrass` | `true` | Adds extra grass and flowers. |
 | `Map.MaxGrassCopies` | `2` | The most extra copies of each grass field. |
+| `Map.RemoveInvisibleBlockers` | `true` | Switches off solid pieces that end up with nothing visible on them after spreading, so there are no invisible walls inside the map. |
 | `Map.InvisibleEdge` | `true` | Adds an invisible wall at the face of the moved border rocks, so the rocks are solid and nobody slips out through gaps. |
 | `Map.RebuildNavigation` | `true` | Rebuilds enemy pathing. Turning it off leaves enemies stuck in the original area. |
 
 ## Known limits (please report anything odd)
 
-- A few layouts had their rocks merged into one mesh when the game was built. The mod swaps in a copy of the same rock from another layout; if it can't find one, that rock becomes invisible but stays solid (an invisible wall). The log reports how many rocks it swapped and how many it couldn't.
+- A few layouts had their rocks merged into one mesh when the game was built. The mod swaps in a copy of the same rock from another layout; if it can't find one, that rock is hidden and its collision is switched off, so it doesn't leave an invisible wall. The log reports how many rocks it swapped and how many it couldn't.
 - Rebuilding enemy pathing can cause a short hitch while the realm loads.
 - Ground textures, roads and rivers don't stretch, so the outer area looks plainer than the middle.
 - The log lists what was changed in each realm. Look for `BiggerMap` lines in `BepInEx/LogOutput.log`.

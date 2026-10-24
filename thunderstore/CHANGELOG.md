@@ -1,3 +1,6 @@
+## 0.9.7
+- **No more invisible walls inside the map.** After spreading, every solid obstacle is checked from above: if most of it has nothing visible there (a merged rock that couldn't be replaced, a collision-only blocker whose visible parts spread apart, a leftover blocker around the original smaller arena), it's switched off. The ground, hazards, objectives and other gameplay objects are never touched. If a realm looks wrong to the check (too many pieces would go), it leaves everything alone and says so in the log. New setting `Map.RemoveInvisibleBlockers` (on).
+
 ## 0.9.6
 - **The invisible edge now sits at the moved border rocks.** It was measured before the game had caught up with the rocks' new positions, so it stood at the original, smaller border and cut the bigger map down. It's now measured at the rock face itself (rays against each rock, not their bounding boxes), so the rocks you see are where you stop, and you can't walk through them or the gaps between them.
 - Fixed "No available candidates found around position in the grid" errors. The game's list of free spots is for the original layout, so the mod now asks it in original-map terms and moves the answer back out. Objectives, events and spawns also land across the whole bigger map now.

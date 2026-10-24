@@ -25,6 +25,21 @@ internal static class Sync
     internal static float AppliedScale;
 
     internal static bool Enabled => hostEnabled ?? Plugin.Enabled.Value;
+
+    /// <summary>A client that hasn't heard from the host: if the host doesn't have the mod it never will, and then
+    /// the map must stay normal.</summary>
+    internal static bool WaitingForHost
+    {
+        get
+        {
+            try
+            {
+                var nm = NetworkManager.Singleton;
+                return nm != null && nm.IsListening && !nm.IsServer && hostScale == null;
+            }
+            catch { return false; }
+        }
+    }
     internal static float Scale => Mathf.Clamp(hostScale ?? Plugin.Scale.Value, 1f, Plugin.MaxScale);
 
     internal static void Tick()
@@ -50,7 +65,7 @@ internal static class Sync
             }
 
             if (Time.unscaledTime < nextSend) return;
-            nextSend = Time.unscaledTime + 3f;
+            nextSend = Time.unscaledTime + 1f;
             string payload = string.Join(";",
                 "Enabled=" + Plugin.Enabled.Value,
                 "Scale=" + Plugin.Scale.Value.ToString(CultureInfo.InvariantCulture));
@@ -86,6 +101,8 @@ internal static class Sync
             bool changed = en != hostEnabled || sc != hostScale;
             hostEnabled = en; hostScale = sc;
             if (changed) Plugin.Log.LogInfo($"Using the host's map size: {(en == false ? "off" : $"x{sc:0.##}")}.");
+            if (changed && AppliedScale > 0f && sc != AppliedScale)
+                Plugin.Log.LogWarning("The host's map size changed after this realm was laid out; it applies from the next realm.");
         }
         catch (Exception ex) { Plugin.Log.LogError($"Settings sync (receive): {ex.Message}"); }
     }

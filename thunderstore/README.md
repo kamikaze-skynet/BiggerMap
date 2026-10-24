@@ -10,7 +10,7 @@ When a realm loads, its layout spreads out from the centre:
 - The invisible floor is widened. Grass and flowers get extra copies so the bigger ground doesn't look bare.
 - Enemy pathing (the navigation mesh) is rebuilt for the new layout, so enemies can chase you everywhere.
 
-**Everyone needs the mod, with the same map size.** The host sends its size to players every few seconds, lobby included, and their games use it. Clients that join after the realm has already loaded use their own setting until the next realm.
+**Everyone needs the mod.** The host's size is used for everyone: the host sends it to players every second, lobby included. If the host doesn't have the mod, the map stays normal for everyone.
 
 ## Config (`girthy_mods.BiggerMap.cfg`)
 
@@ -25,7 +25,7 @@ When a realm loads, its layout spreads out from the centre:
 
 ## Known limits (please report anything odd)
 
-- A few layouts had their rocks merged into one mesh when the game was built. The mod swaps in a copy of the same rock from another layout; if it can't find one, that rock becomes invisible but stays solid. The log reports how many rocks it swapped and how many it couldn't.
+- A few layouts had their rocks merged into one mesh when the game was built. The mod swaps in a copy of the same rock from another layout; if it can't find one, that rock becomes invisible but stays solid (an invisible wall). The log reports how many rocks it swapped and how many it couldn't.
 - Rebuilding enemy pathing can cause a short hitch while the realm loads.
 - Ground textures, roads and rivers don't stretch, so the outer area looks plainer than the middle.
 - The log lists what was changed in each realm. Look for `BiggerMap` lines in `BepInEx/LogOutput.log`.

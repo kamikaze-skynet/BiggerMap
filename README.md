@@ -12,4 +12,6 @@ See [`thunderstore/README.md`](thunderstore/README.md) for the player-facing des
   - Rings (≥8 pieces, all ≥30 m out) get `ceil(scale) − 1` rotated copies. Dense fields with no colliders (≥100 pieces) get `round(scale²) − 1` copies. Only plain scenery is ever copied: no scripts, spawn points or network objects.
   - Static batching: renderers whose `MeshFilter.sharedMesh` is a "Combined Mesh" ignore their transform. They are hidden, and a child is added with the mesh and materials of the same object in an unbatched variant, matched by name and parent name.
 - On the next frame, `Physics.SyncTransforms()` runs and every `NavMeshSurface` is rebuilt with `BuildNavMesh()`. Surfaces set to `Volume` are enlarged first.
-- `Sync` sends the host's settings every 3 s as a Netcode named message. The variant is laid out as the realm loads, before the run starts.
+- `Sync` sends the host's settings every second as a Netcode named message. A client that hasn't heard from the host when the realm loads waits for it, and leaves the map alone if the host doesn't have the mod.
+- The variant's `WorldVariantSpawnableArea` rectangles (clean-zone objectives) and any Cinemachine confiner bounds are scaled too. Confiners are scaled from their original size.
+- Navigation is built from physics colliders (`useGeometry = PhysicsColliders`), because the floor is an invisible box.

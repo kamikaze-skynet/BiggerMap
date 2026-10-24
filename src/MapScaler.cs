@@ -38,6 +38,18 @@ internal static class MapScaler
     [HarmonyPostfix]
     private static void Activated(WorldVariantManager __instance)
     {
+        if (Sync.WaitingForHost)
+        {
+            // A client without the host's size yet: lay out once it arrives (and not at all if the host hasn't got the mod).
+            Runner.WaitForHost(__instance);
+            Plugin.Log.LogInfo("Waiting for the host's map size before changing the layout.");
+            return;
+        }
+        Apply(__instance);
+    }
+
+    internal static void Apply(WorldVariantManager __instance)
+    {
         try
         {
             float k = Sync.Scale;
@@ -50,6 +62,7 @@ internal static class MapScaler
             CollectDonors(__instance.transform);
             int moved = Spread(variant.transform, k);
             ScaleConfiners(variant.transform, k);
+            ScaleSpawnAreas(variant, k);
             Sync.AppliedScale = k;
             Plugin.Log.LogInfo($"{variant.name}: map scaled x{k:0.##} ({moved} objects moved, {standIns} batched meshes replaced" +
                                (missingDonors > 0 ? $", {missingDonors} hidden without a replacement" : "") + $") in {sw.ElapsedMilliseconds} ms.");
@@ -89,6 +102,24 @@ internal static class MapScaler
         if (box != null) box.size = new Vector3(box.size.x * k, box.size.y, box.size.z * k);
     }
 
+    private static void ScaleSpawnAreas(GameObject variant, float k)
+    {
+        try
+        {
+            var comp = variant.GetComponent<WorldVariantSpawnableArea>();
+            var areas = comp?.spawnableAreas;
+            if (areas == null) return;
+            for (int i = 0; i < areas.Count; i++)
+            {
+                var a = areas[i];
+                if (a == null) continue;
+                a.Center = a.Center * k;
+                a.Size = a.Size * k;
+            }
+        }
+        catch (Exception ex) { Plugin.Log.LogWarning($"Spawn areas: {ex.Message}"); }
+    }
+
     /// <summary>A grouping object (no mesh or collider of its own) whose children are spread around the map.</summary>
     private static bool IsContainer(Transform t)
     {
@@ -96,14 +127,14 @@ internal static class MapScaler
         if (n == 0) return false;
         if (t.GetComponent<Renderer>() != null || t.GetComponent<Collider>() != null || t.GetComponent<NetworkObject>() != null || t.GetComponent<LODGroup>() != null)
             return false;
-        if (n >= 8) return true;
+        // Only when its children are spread around the map; a tight cluster (a rock made of parts, a wall) moves as one.
         float far = 0f;
         for (int i = 0; i < n; i++)
         {
             var p = t.GetChild(i).localPosition;
             far = Mathf.Max(far, new Vector2(p.x, p.z).magnitude);
         }
-        return n >= 2 && far > 8f;
+        return far > 8f;
     }
 
     private static int Walk(Transform root, Transform container, float k)
@@ -248,6 +279,15 @@ internal static class MapScaler
         catch { return false; }
     }
 
+    // LODGroup.GetLODs isn't available here; LOD levels are named "..._LOD0", "..._LOD1"...
+    private static bool IsLod0(Renderer r)
+    {
+        string n = r.name;
+        int i = n.LastIndexOf("LOD", StringComparison.OrdinalIgnoreCase);
+        if (i < 0 || i + 3 >= n.Length || !char.IsDigit(n[i + 3])) return true;
+        return n[i + 3] == '0';
+    }
+
     private static void CollectDonors(Transform managerRoot)
     {
         donors.Clear();
@@ -269,6 +309,7 @@ internal static class MapScaler
             var mr = mf.GetComponent<MeshRenderer>();
             if (mr == null || !mr.enabled) continue;
             mr.enabled = false; // the merged mesh stays where the game put it; hide it
+            if (!IsLod0(mr)) continue; // only one level of detail gets a replacement
             if (!donors.TryGetValue(Key(mf.transform), out var d)) { missingDonors++; continue; }
 
             var go = new GameObject(mf.name + " (BiggerMap mesh)");
@@ -282,12 +323,15 @@ internal static class MapScaler
             var r = go.AddComponent<MeshRenderer>();
             r.sharedMaterials = d.mats;
             r.shadowCastingMode = mr.shadowCastingMode;
+            try { r.lightmapIndex = mr.lightmapIndex; r.lightmapScaleOffset = mr.lightmapScaleOffset; } catch { }
             r.receiveShadows = mr.receiveShadows;
             standIns++;
         }
     }
 
     // ---------- camera ----------
+
+    private static readonly Dictionary<IntPtr, Vector3> confinerOriginal = new();
 
     private static void ScaleConfiners(Transform root, float k)
     {
@@ -298,8 +342,11 @@ internal static class MapScaler
                 var vol = c.m_BoundingVolume;
                 if (vol == null) continue;
                 var box = vol.TryCast<BoxCollider>();
-                if (box != null) box.size = new Vector3(box.size.x * k, box.size.y, box.size.z * k);
-                else { var s = vol.transform.localScale; vol.transform.localScale = new Vector3(s.x * k, s.y, s.z * k); }
+                // Remember the size the game gave it, so a confiner that outlives the realm isn't widened twice.
+                Vector3 now = box != null ? box.size : vol.transform.localScale;
+                if (!confinerOriginal.TryGetValue(vol.Pointer, out var orig)) { orig = now; confinerOriginal[vol.Pointer] = orig; }
+                var wide = new Vector3(orig.x * k, orig.y, orig.z * k);
+                if (box != null) box.size = wide; else vol.transform.localScale = wide;
                 Plugin.Log.LogInfo($"Widened camera bounds {vol.name}.");
             }
         }
@@ -331,6 +378,8 @@ internal static class MapScaler
                     s.size = new Vector3(z.x * k + 10f, z.y, z.z * k + 10f);
                     s.center = new Vector3(c.x * k, c.y, c.z * k);
                 }
+                // The floor is an invisible box collider and many meshes aren't readable at runtime: build from colliders.
+                s.useGeometry = UnityEngine.AI.NavMeshCollectGeometry.PhysicsColliders;
                 s.BuildNavMesh();
                 Plugin.Log.LogInfo($"Rebuilt navigation for {s.name} ({s.collectObjects}) in {sw.ElapsedMilliseconds} ms.");
             }
@@ -344,6 +393,10 @@ internal static class MapScaler
 public class Runner : MonoBehaviour
 {
     public Runner(IntPtr ptr) : base(ptr) { }
+
+    private static WorldVariantManager waiting;
+
+    internal static void WaitForHost(WorldVariantManager m) => waiting = m;
 
     private static Transform pendingVariant;
     private static float pendingScale;
@@ -359,11 +412,16 @@ public class Runner : MonoBehaviour
     private void Update()
     {
         Sync.Tick();
+        if (waiting is not null)
+        {
+            if (waiting.WasCollected || waiting == null) waiting = null;
+            else if (!Sync.WaitingForHost) { var m = waiting; waiting = null; MapScaler.Apply(m); }
+        }
         if (pendingVariant is null) return;
         if (frames-- > 0) return;
         var v = pendingVariant;
         pendingVariant = null;
-        if (v == null || v.WasCollected) return;
+        if (v.WasCollected || v == null) return;
         MapScaler.BuildNavMesh(v, pendingScale);
     }
 }

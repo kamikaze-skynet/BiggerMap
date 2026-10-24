@@ -15,7 +15,7 @@ public class Plugin : BasePlugin
 {
     public const string Guid = "girthy_mods.BiggerMap";
     public const string Name = "BiggerMap";
-    public const string Version = "0.9.5";
+    public const string Version = "0.9.6";
 
     internal const float MaxScale = 1.8f; // past this the scenery leaves the realm's ground
 
@@ -47,7 +47,7 @@ public class Plugin : BasePlugin
 
         var harmony = new Harmony(Guid);
         harmony.PatchAll(typeof(MapScaler));
-        harmony.PatchAll(typeof(GridClamp));
+        harmony.PatchAll(typeof(GridMap));
         AddComponent<Runner>();
         Log.LogInfo($"{Name} {Version} ready.");
     }

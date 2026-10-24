@@ -21,7 +21,7 @@ When a realm loads, its layout spreads out from the centre:
 | `Map.FillBorderGaps` | `true` | Adds border pieces so the bigger ring is closed. |
 | `Map.FillGrass` | `true` | Adds extra grass and flowers. |
 | `Map.MaxGrassCopies` | `2` | The most extra copies of each grass field. |
-| `Map.InvisibleEdge` | `true` | Adds an invisible wall just inside the moved border, so nobody slips out through gaps. |
+| `Map.InvisibleEdge` | `true` | Adds an invisible wall at the face of the moved border rocks, so the rocks are solid and nobody slips out through gaps. |
 | `Map.RebuildNavigation` | `true` | Rebuilds enemy pathing. Turning it off leaves enemies stuck in the original area. |
 
 ## Known limits (please report anything odd)

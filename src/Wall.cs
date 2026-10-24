@@ -69,15 +69,19 @@ internal static class Wall
                 if (c != null && !c.isTrigger) cols.Add(c);
         if (cols.Count == 0) return;
 
+        // The pieces were just moved; colliders only follow their transforms after a physics sync. (Before 0.9.6 the
+        // wall was measured from the old, unmoved collider positions, so it stood at the original small border.)
+        Physics.SyncTransforms();
+
         var centre = Vector3.zero;
         foreach (var l in border.Leaves) centre += l.position;
         centre /= border.Leaves.Count;
         centre.y = root.position.y;
 
-        // Inner face of the border per slice: for each collider, its nearest distance to the centre, spread over the
-        // slices its footprint covers.
+        // Which colliders cover which slices (by their footprint), and a rough distance from their bounding boxes.
         var inner = new float[Slices];
-        for (int i = 0; i < Slices; i++) inner[i] = float.MaxValue;
+        var perSlice = new List<Collider>[Slices];
+        for (int i = 0; i < Slices; i++) { inner[i] = float.MaxValue; perSlice[i] = new List<Collider>(); }
         foreach (var c in cols)
         {
             Bounds b;
@@ -93,11 +97,36 @@ internal static class Wall
                 a0 = Mathf.Min(a0, rel); a1 = Mathf.Max(a1, rel);
             }
             int s0 = Mathf.FloorToInt((ac + a0) / 360f * Slices), s1 = Mathf.CeilToInt((ac + a1) / 360f * Slices);
-            for (int s = s0; s <= s1; s++)
+            for (int sl = s0; sl <= s1; sl++)
             {
-                int k = ((s % Slices) + Slices) % Slices;
+                int k = ((sl % Slices) + Slices) % Slices;
                 inner[k] = Mathf.Min(inner[k], d);
+                perSlice[k].Add(c);
             }
+        }
+
+        // The real rock face: rays from the centre outward at a few heights and across each slice, against that
+        // slice's border colliders only. A bounding box reaches further in than the rock, so it's only the fallback.
+        int rayHits = 0;
+        float[] heights = { 1f, 2.5f, 4f };
+        for (int i = 0; i < Slices; i++)
+        {
+            if (perSlice[i].Count == 0) continue;
+            float best = float.MaxValue;
+            for (int j = 0; j < 3; j++)
+            {
+                float a = (i + 0.2f + 0.3f * j) * Mathf.PI * 2f / Slices;
+                var dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                foreach (float h in heights)
+                {
+                    var ray = new Ray(centre + Vector3.up * h, dir);
+                    foreach (var c in perSlice[i])
+                    {
+                        try { if (c.Raycast(ray, out var hit, 400f) && hit.distance > 5f) best = Mathf.Min(best, hit.distance); } catch { }
+                    }
+                }
+            }
+            if (best < float.MaxValue) { inner[i] = best; rayHits++; }
         }
 
         // Gaps: take the nearer of the two neighbouring known distances.
@@ -140,32 +169,77 @@ internal static class Wall
         Built = true;
         Centre = centre;
         Radius = max;
-        Plugin.Log.LogInfo($"Invisible edge along '{border.Name}': {min:0.#}-{max:0.#} m from ({centre.x:0.#}, {centre.z:0.#}), {known}/{Slices} slices on border rocks, layer {LayerMask.LayerToName(layer)}.");
+        Plugin.Log.LogInfo($"Invisible edge along '{border.Name}': {min:0.#}-{max:0.#} m from ({centre.x:0.#}, {centre.z:0.#}), {known}/{Slices} slices on border rocks ({rayHits} measured at the rock face), layer {LayerMask.LayerToName(layer)}.");
     }
 
     private static float Angle(Vector3 v) => Mathf.Repeat(Mathf.Atan2(v.z, v.x) * Mathf.Rad2Deg, 360f);
 }
 
 /// <summary>
-/// The game places objectives and similar things on a fixed 150 x 150 m grid around the centre
-/// (MapPositionProvider / WorldGrid). On the bigger map players can stand outside it, and asking for a position
-/// "around" them then fails ("No available candidates found around position in the grid"). Keep the request
-/// inside the grid.
+/// The game picks spots for objectives, events and spawns on a fixed grid of free cells (MapPositionProvider), worked
+/// out from the original, smaller layout. Every spot in the bigger map is a spot in the original one moved outward
+/// by the scale, so questions are asked in original-map terms (position and distances divided by the scale) and the
+/// answer is moved back out. Before 0.9.6 players standing past the original border got "No available candidates
+/// found around position in the grid".
 /// </summary>
 [HarmonyPatch]
-internal static class GridClamp
+internal static class GridMap
 {
-    private const float Half = 75f; // WorldGrid.GridSize / 2
+    internal static Transform Root;
+
+    private static bool Active(out float k)
+    {
+        k = Sync.AppliedScale;
+        if (k <= 1.01f) return false;
+        try { return Root is not null && !Root.WasCollected && Root != null; } catch { return false; }
+    }
+
+    private static Vector3 ToGrid(Vector3 p, float k)
+    {
+        var l = Root.InverseTransformPoint(p);
+        var g = Root.TransformPoint(new Vector3(l.x / k, l.y, l.z / k));
+        return new Vector3(g.x, p.y, g.z);
+    }
+
+    private static Vector3 FromGrid(Vector3 p, float k)
+    {
+        var l = Root.InverseTransformPoint(p);
+        var w = Root.TransformPoint(new Vector3(l.x * k, l.y, l.z * k));
+        return new Vector3(w.x, p.y, w.z);
+    }
 
     [HarmonyPatch(typeof(MapPositionProvider), nameof(MapPositionProvider.GetRandomPosition), new[] { typeof(Vector3), typeof(float), typeof(float) })]
     [HarmonyPrefix]
-    private static void GetRandomPosition_Prefix(ref Vector3 aroundWorldPosition, float maxDistance)
+    private static void Around_Prefix(ref Vector3 aroundWorldPosition, ref float minDistance, ref float maxDistance)
     {
-        if (Sync.AppliedScale <= 1.01f) return;
-        float limit = Mathf.Max(10f, Half - Mathf.Min(maxDistance, Half) * 0.5f - 2f);
-        float m = Mathf.Max(Mathf.Abs(aroundWorldPosition.x), Mathf.Abs(aroundWorldPosition.z));
-        if (m <= limit) return;
-        float f = limit / m;
-        aroundWorldPosition = new Vector3(aroundWorldPosition.x * f, aroundWorldPosition.y, aroundWorldPosition.z * f);
+        if (!Active(out float k)) return;
+        aroundWorldPosition = ToGrid(aroundWorldPosition, k);
+        minDistance /= k;
+        maxDistance /= k;
     }
+
+    [HarmonyPatch(typeof(MapPositionProvider), nameof(MapPositionProvider.GetRandomPosition), new[] { typeof(Vector3), typeof(float), typeof(float) })]
+    [HarmonyPostfix]
+    private static void Around_Postfix(ref Vector3 __result) { if (Active(out float k)) __result = FromGrid(__result, k); }
+
+    [HarmonyPatch(typeof(MapPositionProvider), nameof(MapPositionProvider.GetRandomPosition), new Type[0])]
+    [HarmonyPostfix]
+    private static void Anywhere_Postfix(ref Vector3 __result) { if (Active(out float k)) __result = FromGrid(__result, k); }
+
+    [HarmonyPatch(typeof(MapPositionProvider), nameof(MapPositionProvider.TryGetFurthestAvailablePosition))]
+    [HarmonyPrefix]
+    private static void Furthest_Prefix(ref Vector3 origin, ref float maxDistance)
+    {
+        if (!Active(out float k)) return;
+        origin = ToGrid(origin, k);
+        maxDistance /= k;
+    }
+
+    [HarmonyPatch(typeof(MapPositionProvider), nameof(MapPositionProvider.TryGetFurthestAvailablePosition))]
+    [HarmonyPostfix]
+    private static void Furthest_Postfix(bool __result, ref Vector3 position) { if (__result && Active(out float k)) position = FromGrid(position, k); }
+
+    [HarmonyPatch(typeof(MapPositionProvider), nameof(MapPositionProvider.IsPositionAvailable), new[] { typeof(Vector3) })]
+    [HarmonyPrefix]
+    private static void Available_Prefix(ref Vector3 position) { if (Active(out float k)) position = ToGrid(position, k); }
 }

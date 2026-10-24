@@ -1,6 +1,6 @@
 {
   "name": "BiggerMap",
-  "version_number": "0.9.5",
+  "version_number": "0.9.6",
   "website_url": "https://github.com/kamikaze-skynet/BiggerMap",
   "description": "Experimental: a bigger arena in every realm. The border ring, scenery, objectives and props spread out, and enemy pathing is rebuilt. Everyone needs it; the host's size is used.",
   "dependencies": [

@@ -62,6 +62,7 @@ internal static class MapScaler
             CollectDonors(__instance.transform);
             Wall.Reset();
             int moved = Spread(variant.transform, k);
+            GridMap.Root = variant.transform;
             if (Plugin.InvisibleEdge.Value) Wall.Build(variant.transform);
             TerrainStretch.Apply(variant.transform, k);
             ScaleConfiners(variant.transform, k);

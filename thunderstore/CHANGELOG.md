@@ -1,3 +1,7 @@
+## 0.9.6
+- **The invisible edge now sits at the moved border rocks.** It was measured before the game had caught up with the rocks' new positions, so it stood at the original, smaller border and cut the bigger map down. It's now measured at the rock face itself (rays against each rock, not their bounding boxes), so the rocks you see are where you stop, and you can't walk through them or the gaps between them.
+- Fixed "No available candidates found around position in the grid" errors. The game's list of free spots is for the original layout, so the mod now asks it in original-map terms and moves the answer back out. Objectives, events and spawns also land across the whole bigger map now.
+
 ## 0.9.5
 - **Everyone uses the host's settings.** While you're in someone's game, this mod reads the host's config instead of yours, from the lobby on. Your config file isn't changed, and your own values are back when you leave. If the host doesn't have the mod, it stays off for you in that game.
 

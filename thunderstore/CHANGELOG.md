@@ -1,3 +1,6 @@
+## 0.9.5
+- **Everyone uses the host's settings.** While you're in someone's game, this mod reads the host's config instead of yours, from the lobby on. Your config file isn't changed, and your own values are back when you leave. If the host doesn't have the mod, it stays off for you in that game.
+
 ## 0.9.4
 - The invisible edge now follows the border's real shape. It stands right against the inner face of the border rocks and only bridges the gaps; before, it was a circle at the border's closest point and cut off up to 20 m of playable ground.
 - Picks the actual border to follow, so a ring of rocks or trees inside the arena can't be mistaken for it.

@@ -30,3 +30,7 @@ When a realm loads, its layout spreads out from the centre:
 - Rebuilding enemy pathing can cause a short hitch while the realm loads.
 - Ground textures, roads and rivers don't stretch, so the outer area looks plainer than the middle.
 - The log lists what was changed in each realm. Look for `BiggerMap` lines in `BepInEx/LogOutput.log`.
+
+## Multiplayer settings
+
+In multiplayer everyone plays with the **host's** settings: the host's config is sent to every player from the lobby on, and the mod reads it instead of yours while you're connected. Your config file is never changed. If the host doesn't have this mod, it stays off for you in that game.

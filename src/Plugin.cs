@@ -15,7 +15,7 @@ public class Plugin : BasePlugin
 {
     public const string Guid = "girthy_mods.BiggerMap";
     public const string Name = "BiggerMap";
-    public const string Version = "0.9.4";
+    public const string Version = "0.9.5";
 
     internal const float MaxScale = 1.8f; // past this the scenery leaves the realm's ground
 
@@ -32,6 +32,7 @@ public class Plugin : BasePlugin
     public override void Load()
     {
         Log = base.Log;
+        HostConfig.Init(this, Guid, System.Array.Empty<string>(), null);
 
         Enabled = Config.Bind("Map", "Enabled", true, "Make the arena bigger.");
         Scale = Config.Bind("Map", "Scale", 1.5f,

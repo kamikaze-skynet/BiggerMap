@@ -439,6 +439,7 @@ public class Runner : MonoBehaviour
     private void Update()
     {
         Sync.Tick();
+        try { Arena.Tick(); } catch { }
         if (waiting is not null)
         {
             if (waiting.WasCollected || waiting == null) waiting = null;

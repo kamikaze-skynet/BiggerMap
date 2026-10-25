@@ -1,19 +1,38 @@
-# BiggerMap
+# BiggerMap (experimental)
 
-A [BepInEx](https://github.com/BepInEx/BepInEx) IL2CPP mod for **The Spell Brigade** that makes each realm's arena bigger. It is experimental.
+A bigger arena in every realm.
 
-See [`thunderstore/README.md`](thunderstore/README.md) for the player-facing description and config.
+When a realm loads, its layout spreads out from the centre:
 
-## How it works
+- The border ring moves out. Copies of its pieces fill the gaps that opens up.
+- Rocks, trees, props and the scenery behind the border move out. They keep their size; only their distance from the centre changes.
+- Objective and artifact spawn points move out too, so objectives end up further apart.
+- The ground itself (the terrain's hills) is stretched outward to match, and the invisible floor is widened. Grass and flowers get extra copies so the bigger ground doesn't look bare.
+- Enemy pathing (the navigation mesh) is rebuilt for the new layout, so enemies can chase you everywhere.
 
-- Each realm scene has `<Realm>Environment/WorldVariantManager` with three layout variants. `ActivateCorrectVariant` (called from `Awake`) turns one on, on every player's game. A postfix spreads that variant out:
-  - `FloorCollider`: its box (or, when it has a visible mesh, its transform) is widened by the scale.
-  - Containers are objects without a renderer or collider whose children are spread out. The mod walks down through them, and every placed object gets its XZ distance from the centre multiplied by the scale. A big mesh at the centre is stretched instead.
-  - Rings (≥8 pieces, all ≥30 m out) get `ceil(scale) − 1` rotated copies. Dense fields with no colliders (≥100 pieces) get `round(scale²) − 1` copies. Only plain scenery is ever copied: no scripts, spawn points or network objects.
-  - Static batching: renderers whose `MeshFilter.sharedMesh` is a "Combined Mesh" ignore their transform. They are hidden, and a child is added with the mesh and materials of the same object in an unbatched variant, matched by name and parent name.
-- `TerrainStretch`: the terrain's `TerrainData.size` (x, z) is multiplied by the scale, which stretches its hills and textures, and the terrain is moved so the centre stays put. The original size is cached per terrain asset, because the asset stays in memory between loads. (Writing the height map through the `Internal_SetHeights_Injected` icall crashed in 0.9.1, because that icall wants the native object pointer.)
-- `Wall`: the innermost ring group with colliders (the border) gives a centre and an inner radius (the 1/7 percentile of the pieces' distances, minus 2.5 m). 96 invisible `BoxCollider`s, 40 m tall, go on that radius, on the border colliders' layer. The navmesh build is then limited to a `Volume` just around that circle.
-- On the next frame, `Physics.SyncTransforms()` runs and every `NavMeshSurface` is rebuilt with `BuildNavMesh()`. Surfaces set to `Volume` are enlarged first.
-- `Sync` sends the host's settings every second as a Netcode named message. A client that hasn't heard from the host when the realm loads waits for it, and leaves the map alone if the host doesn't have the mod.
-- The variant's `WorldVariantSpawnableArea` rectangles (clean-zone objectives) and any Cinemachine confiner bounds are scaled too. Confiners are scaled from their original size.
-- Navigation is built from physics colliders (`useGeometry = PhysicsColliders`), because the floor is an invisible box.
+**Everyone needs the mod.** The host's size is used for everyone: the host sends it to players every second, lobby included. If the host doesn't have the mod, the map stays normal for everyone.
+
+## Config (`girthy_mods.BiggerMap.cfg`)
+
+| Setting | Default | What it does |
+|---|---|---|
+| `Map.Enabled` | `true` | Turns the bigger arena on or off. |
+| `Map.Scale` | `1.5` | How much wider the arena is (1–1.8). 1.5 is about 2.25× the area. |
+| `Map.FillBorderGaps` | `true` | Adds border pieces so the bigger ring is closed. |
+| `Map.FillGrass` | `true` | Adds extra grass and flowers. |
+| `Map.MaxGrassCopies` | `2` | The most extra copies of each grass field. |
+| `Map.RemoveInvisibleBlockers` | `true` | Switches off solid pieces that end up with nothing visible on them after spreading, so there are no invisible walls inside the map. |
+| `Map.InvisibleEdge` | `true` | Adds an invisible wall at the face of the moved border rocks, so the rocks are solid and nobody slips out through gaps. |
+| `Map.RebuildNavigation` | `true` | Rebuilds enemy pathing. Turning it off leaves enemies stuck in the original area. |
+| `Map.ObjectiveExtraTime` | `1` | Extra time for timed objectives (herding the fungi, the statues, capture zones...), since everything in them is farther apart. 1 = in step with the map (a 1.5x map gives 1.5x the time), 0 = none. |
+
+## Known limits (please report anything odd)
+
+- A few layouts had their rocks merged into one mesh when the game was built. The mod swaps in a copy of the same rock from another layout; if it can't find one, that rock is hidden and its collision is switched off, so it doesn't leave an invisible wall. The log reports how many rocks it swapped and how many it couldn't.
+- Rebuilding enemy pathing can cause a short hitch while the realm loads.
+- Ground textures, roads and rivers don't stretch, so the outer area looks plainer than the middle.
+- The log lists what was changed in each realm. Look for `BiggerMap` lines in `BepInEx/LogOutput.log`.
+
+## Multiplayer settings
+
+In multiplayer everyone plays with the **host's** settings: the host's config is sent to every player from the lobby on, and the mod reads it instead of yours while you're connected. Your config file is never changed. If the host doesn't have this mod, it stays off for you in that game.

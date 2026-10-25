@@ -15,7 +15,7 @@ public class Plugin : BasePlugin
 {
     public const string Guid = "girthy_mods.BiggerMap";
     public const string Name = "BiggerMap";
-    public const string Version = "0.9.8";
+    public const string Version = "0.9.9";
 
     internal const float MaxScale = 1.8f; // past this the scenery leaves the realm's ground
 
@@ -29,6 +29,7 @@ public class Plugin : BasePlugin
     internal static ConfigEntry<bool> RebuildNavMesh;
     internal static ConfigEntry<bool> InvisibleEdge;
     internal static ConfigEntry<bool> RemoveInvisibleBlockers;
+    internal static ConfigEntry<float> ObjectiveExtraTime;
 
     public override void Load()
     {
@@ -48,9 +49,13 @@ public class Plugin : BasePlugin
             "Switch off solid pieces left with nothing visible on them after spreading (they'd be invisible walls).");
         InvisibleEdge = Config.Bind("Map", "InvisibleEdge", true, "Add an invisible wall just inside the moved border so players and enemies can't slip out through gaps.");
 
+        ObjectiveExtraTime = Config.Bind("Map", "ObjectiveExtraTime", 1f,
+            new ConfigDescription("Extra time for timed objectives (herding, statues, capture...), as everything in them is farther apart. 1 = in step with the map (x1.5 map: x1.5 time), 0 = none.", new AcceptableValueRange<float>(0f, 3f)));
+
         var harmony = new Harmony(Guid);
         harmony.PatchAll(typeof(MapScaler));
         harmony.PatchAll(typeof(GridMap));
+        try { harmony.PatchAll(typeof(Arena)); } catch (System.Exception ex) { Log.LogError($"Failed to apply the spawn and event fixes: {ex.Message}"); }
         AddComponent<Runner>();
         Log.LogInfo($"{Name} {Version} ready.");
     }

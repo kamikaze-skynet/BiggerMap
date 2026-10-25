@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using HarmonyLib;
+using Unity.AI.Navigation;
 using UnityEngine;
+using UnityEngine.AI;
 
 namespace BiggerMap;
 
@@ -22,10 +24,12 @@ internal static class Wall
     internal static bool Built;
     internal static Vector3 Centre;     // world
     internal static float Radius;       // the farthest wall slice (for the navigation volume)
+    internal static float[] SliceRadius; // the wall's inner face, per slice (world metres from Centre)
+    internal static Transform Holder;
 
     private const int Slices = 120;
 
-    internal static void Reset() { candidates.Clear(); Built = false; Radius = 0f; }
+    internal static void Reset() { candidates.Clear(); Built = false; Radius = 0f; SliceRadius = null; Holder = null; }
 
     /// <summary>A ring-shaped group of pieces with colliders, seen while spreading.</summary>
     internal static void Offer(Transform root, Transform container, List<Transform> outerLeaves)
@@ -164,9 +168,11 @@ internal static class Wall
 
         const float thickness = 3f, height = 40f, into = 0.5f; // the wall's inner face sits 0.5 m inside the rock face
         float min = float.MaxValue, max = 0f;
+        var radii = new float[Slices];
         for (int i = 0; i < Slices; i++)
         {
             float rad = filled[i] + into;
+            radii[i] = rad;
             min = Mathf.Min(min, rad); max = Mathf.Max(max, rad);
             float a = (i + 0.5f) * Mathf.PI * 2f / Slices;
             var dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
@@ -177,15 +183,80 @@ internal static class Wall
             go.transform.position = centre + dir * (rad + thickness / 2f) + Vector3.up * (height / 2f - 5f);
             go.transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
             go.AddComponent<BoxCollider>().size = new Vector3(chord, height, thickness);
+            // Nothing may stand on top of the wall (it was walkable ground 35 m up for the navigation).
+            try { var mod = go.AddComponent<NavMeshModifier>(); mod.overrideArea = true; mod.area = NotWalkable; } catch { }
         }
 
         Built = true;
         Centre = centre;
         Radius = max;
+        SliceRadius = radii;
+        Holder = holder.transform;
+        BlockOutside(holder.transform, centre, radii);
         Plugin.Log.LogInfo($"Invisible edge along '{border.Name}': {min:0.#}-{max:0.#} m from ({centre.x:0.#}, {centre.z:0.#}), {known}/{Slices} slices on border rocks ({rayHits} measured at the rock face), layer {LayerMask.LayerToName(layer)}.");
     }
 
     private static float Angle(Vector3 v) => Mathf.Repeat(Mathf.Atan2(v.z, v.x) * Mathf.Rad2Deg, 360f);
+
+    private const int NotWalkable = 1; // Unity's built-in navigation area
+
+    /// <summary>The ground outside the wall is still floor, so the navigation would cover it: enemies, pickups and
+    /// event spots snapped to the navigation could land outside the arena. Mark it all as not walkable.</summary>
+    private static void BlockOutside(Transform holder, Vector3 centre, float[] radii)
+    {
+        int made = 0;
+        try
+        {
+            const float depth = 12f;
+            const int steps = 7; // out to ~84 m past the wall: past the corners of the navigation area
+            for (int i = 0; i < Slices; i++)
+            {
+                float a = (i + 0.5f) * Mathf.PI * 2f / Slices;
+                var dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                for (int k = 0; k < steps; k++)
+                {
+                    float r0 = radii[i] + 2f + k * depth, r1 = r0 + depth;
+                    float width = 2f * r1 * Mathf.Sin(Mathf.PI / Slices) * 1.15f;
+                    var go = new GameObject("Outside");
+                    go.transform.SetParent(holder, false);
+                    go.transform.position = centre + dir * ((r0 + r1) / 2f) + Vector3.up * 10f;
+                    go.transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
+                    var v = go.AddComponent<NavMeshModifierVolume>();
+                    v.size = new Vector3(width, 120f, depth + 0.5f);
+                    v.center = Vector3.zero;
+                    v.area = NotWalkable;
+                    made++;
+                }
+            }
+        }
+        catch (Exception ex) { Plugin.Log.LogWarning($"Marking the outside as not walkable: {ex.Message} ({made} areas made)"); }
+    }
+
+    private static int SliceOf(Vector3 p)
+    {
+        int i = Mathf.FloorToInt(Angle(p - Centre) / 360f * Slices);
+        return ((i % Slices) + Slices) % Slices;
+    }
+
+    /// <summary>Is this point inside the arena, at least margin metres from the edge?</summary>
+    internal static bool Inside(Vector3 p, float margin)
+    {
+        if (!Built || SliceRadius == null) return true;
+        var d = p - Centre; d.y = 0f;
+        return d.magnitude <= SliceRadius[SliceOf(p)] - margin;
+    }
+
+    /// <summary>The point if it's inside the arena; else the nearest spot margin metres inside the edge, on walkable ground.</summary>
+    internal static Vector3 Clamp(Vector3 p, float margin)
+    {
+        if (Inside(p, margin)) return p;
+        var d = p - Centre; d.y = 0f;
+        float r = Mathf.Max(5f, SliceRadius[SliceOf(p)] - margin);
+        var q = Centre + (d.sqrMagnitude > 0.01f ? d.normalized : Vector3.forward) * r;
+        q.y = p.y;
+        try { if (NavMesh.SamplePosition(q, out var hit, 8f, -1) && Inside(hit.position, 1f)) q = hit.position; } catch { }
+        return q;
+    }
 }
 
 /// <summary>
@@ -199,6 +270,7 @@ internal static class Wall
 internal static class GridMap
 {
     internal static Transform Root;
+    private const float EdgeMargin = 4f; // spots (scrolls, objectives, events) stay this far inside the edge
 
     private static bool Active(out float k)
     {
@@ -256,11 +328,11 @@ internal static class GridMap
 
     [HarmonyPatch(typeof(MapPositionProvider), nameof(MapPositionProvider.GetRandomPosition), new[] { typeof(Vector3), typeof(float), typeof(float) })]
     [HarmonyPostfix]
-    private static void Around_Postfix(ref Vector3 __result) { if (Active(out float k)) __result = FromGrid(__result, k); }
+    private static void Around_Postfix(ref Vector3 __result) { if (Active(out float k)) __result = Wall.Clamp(FromGrid(__result, k), EdgeMargin); }
 
     [HarmonyPatch(typeof(MapPositionProvider), nameof(MapPositionProvider.GetRandomPosition), new Type[0])]
     [HarmonyPostfix]
-    private static void Anywhere_Postfix(ref Vector3 __result) { if (Active(out float k)) __result = FromGrid(__result, k); }
+    private static void Anywhere_Postfix(ref Vector3 __result) { if (Active(out float k)) __result = Wall.Clamp(FromGrid(__result, k), EdgeMargin); }
 
     [HarmonyPatch(typeof(MapPositionProvider), nameof(MapPositionProvider.TryGetFurthestAvailablePosition))]
     [HarmonyPrefix]
@@ -273,7 +345,7 @@ internal static class GridMap
 
     [HarmonyPatch(typeof(MapPositionProvider), nameof(MapPositionProvider.TryGetFurthestAvailablePosition))]
     [HarmonyPostfix]
-    private static void Furthest_Postfix(bool __result, ref Vector3 position) { if (__result && Active(out float k)) position = FromGrid(position, k); }
+    private static void Furthest_Postfix(bool __result, ref Vector3 position) { if (__result && Active(out float k)) position = Wall.Clamp(FromGrid(position, k), EdgeMargin); }
 
     [HarmonyPatch(typeof(MapPositionProvider), nameof(MapPositionProvider.IsPositionAvailable), new[] { typeof(Vector3) })]
     [HarmonyPrefix]

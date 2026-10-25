@@ -1,3 +1,8 @@
+## 0.9.9
+- **Nothing spawns outside the map any more.** The ground outside the invisible edge (and the top of the edge) is no longer walkable, so enemies, scrolls and event spots can't be placed out there. Wave enemies and the game's own spots for objectives and pickups that would land outside are pulled back inside.
+- **The line event fills the whole map again.** The row of enemies sweeping across the map (the dogs in Verdant Meadows) was sized for the original map; it's now as wide as the bigger one. The mob event starts the right distance out, too.
+- **Timed objectives get more time** (herding the fungi, the statues, capture zones...), as everything in them is farther apart. New setting `Map.ObjectiveExtraTime` (1 = in step with the map size, 0 = off).
+
 ## 0.9.8
 - When a search for a free spot near a player finds nothing (near the edge or against rocks), it's widened and nudged towards the middle instead of failing. That stops the remaining "No available candidates found around position in the grid" errors, and the thing lands near the player instead of anywhere on the map.
 

@@ -24,6 +24,7 @@ When a realm loads, its layout spreads out from the centre:
 | `Map.RemoveInvisibleBlockers` | `true` | Switches off solid pieces that end up with nothing visible on them after spreading, so there are no invisible walls inside the map. |
 | `Map.InvisibleEdge` | `true` | Adds an invisible wall at the face of the moved border rocks, so the rocks are solid and nobody slips out through gaps. |
 | `Map.RebuildNavigation` | `true` | Rebuilds enemy pathing. Turning it off leaves enemies stuck in the original area. |
+| `Map.ObjectiveExtraTime` | `1` | Extra time for timed objectives (herding the fungi, the statues, capture zones...), since everything in them is farther apart. 1 = in step with the map (a 1.5x map gives 1.5x the time), 0 = none. |
 
 ## Known limits (please report anything odd)
 

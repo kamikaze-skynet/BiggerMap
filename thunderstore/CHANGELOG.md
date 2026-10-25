@@ -1,3 +1,6 @@
+## 0.9.10
+- Smoother: the extra objective time is now given when an objective starts, instead of searching the whole scene for objectives every second (that caused a small hitch each second).
+
 ## 0.9.9
 - **Nothing spawns outside the map any more.** The ground outside the invisible edge (and the top of the edge) is no longer walkable, so enemies, scrolls and event spots can't be placed out there. Wave enemies and the game's own spots for objectives and pickups that would land outside are pulled back inside.
 - **The line event fills the whole map again.** The row of enemies sweeping across the map (the dogs in Verdant Meadows) was sized for the original map; it's now as wide as the bigger one. The mob event starts the right distance out, too.

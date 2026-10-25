@@ -76,47 +76,27 @@ internal static class Arena
     }
 
     // ---------- objective time ----------
+    // Hooked on the objective director's "objective started" (no scene searches: those cost a frame hitch).
 
-    private static readonly HashSet<IntPtr> stretched = new();
-    private static float nextScan;
-
-    /// <summary>Every second: any timed objective whose time limit hasn't been stretched yet gets more time.</summary>
-    internal static void Tick()
+    [HarmonyPatch(typeof(ObjectiveDirector), nameof(ObjectiveDirector.NotifyObjectiveStarted))]
+    [HarmonyPostfix]
+    private static void ObjectiveStarted(IAmObjective objective)
     {
-        if (Time.unscaledTime < nextScan) return;
-        nextScan = Time.unscaledTime + 1f;
-        if (!Active(out float k)) { if (stretched.Count > 0) stretched.Clear(); return; }
-        float factor = 1f + (k - 1f) * Mathf.Max(0f, Plugin.ObjectiveExtraTime.Value);
-        if (factor <= 1.001f) return;
         try
         {
-            Stretch(UObject.FindObjectsOfType<HerdingObjectiveManager>(), o => o.GetTimeLimitTimer(), factor);
-            Stretch(UObject.FindObjectsOfType<CollectObjectiveManager>(), o => o.GetTimeLimitTimer(), factor);
-            Stretch(UObject.FindObjectsOfType<CaptureObjectiveManager>(), o => o.GetTimeLimitTimer(), factor);
-            Stretch(UObject.FindObjectsOfType<CleanObjectiveManager>(), o => o.GetTimeLimitTimer(), factor);
-            Stretch(UObject.FindObjectsOfType<HuntTargetObjective>(), o => o.GetTimeLimitTimer(), factor);
-            Stretch(UObject.FindObjectsOfType<OrderObjective>(), o => o.GetTimeLimitTimer(), factor);
-            Stretch(UObject.FindObjectsOfType<PetrifiedEnemiesObjectiveManager>(), o => o.GetTimeLimitTimer(), factor);
-            Stretch(UObject.FindObjectsOfType<PushObjectiveManager>(), o => o.GetTimeLimitTimer(), factor);
-            Stretch(UObject.FindObjectsOfType<SacrificeObjectiveManager>(), o => o.GetTimeLimitTimer(), factor);
+            if (objective == null || !Active(out float k)) return;
+            float factor = 1f + (k - 1f) * Mathf.Max(0f, Plugin.ObjectiveExtraTime.Value);
+            if (factor <= 1.001f) return;
+            var timed = objective.TryCast<IAmTimedObjective>();
+            var t = timed?.GetTimeLimitTimer();
+            if (t == null) return;
+            float before = t.timeLimitInSeconds;
+            if (before <= 0f) return;
+            t.timeLimitInSeconds = before * factor;
+            Plugin.Log.LogInfo($"Objective time limit: {before:0} s -> {before * factor:0} s for the bigger map.");
         }
         catch (Exception ex) { Plugin.Log.LogWarning($"Objective time: {ex.Message}"); }
     }
 
-    private static void Stretch<T>(Il2CppInterop.Runtime.InteropTypes.Arrays.Il2CppArrayBase<T> list, Func<T, CountDownTimer> timerOf, float factor) where T : UObject
-    {
-        if (list == null) return;
-        for (int i = 0; i < list.Length; i++)
-        {
-            var o = list[i];
-            if (o == null) continue;
-            CountDownTimer t;
-            try { t = timerOf(o); } catch { continue; }
-            if (t == null || !stretched.Add(t.Pointer)) continue;
-            float before = t.timeLimitInSeconds;
-            if (before <= 0f) continue;
-            t.timeLimitInSeconds = before * factor;
-            Plugin.Log.LogInfo($"{o.GetIl2CppType().Name}: time limit {before:0} s -> {before * factor:0} s for the bigger map.");
-        }
-    }
+    internal static void Tick() { }
 }

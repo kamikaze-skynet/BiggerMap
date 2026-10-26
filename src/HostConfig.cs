@@ -93,6 +93,7 @@ internal static class HostConfig
             if (IsPersonal(kv.Key)) continue;
             parts.Add(kv.Key.Section + "\u001f" + kv.Key.Key + "\u001f" + kv.Value.GetSerializedValue());
         }
+        parts.Add("@version\u001f" + Plugin.Version); // players log which copy the host runs (older players skip it)
         string payload = string.Join("\u001e", parts);
         var writer = new FastBufferWriter(payload.Length * 2 + 64, Allocator.Temp, -1);
         try
@@ -139,17 +140,33 @@ internal static class HostConfig
             if (payload == lastApplied) return;
             lastApplied = payload;
             int n = 0;
+            string hostVersion = null;
             foreach (var item in payload.Split('\u001e'))
             {
                 var f = item.Split('\u001f');
+                if (f.Length == 2 && f[0] == "@version") { hostVersion = f[1]; continue; }
                 if (f.Length != 3) continue;
                 var def = new ConfigDefinition(f[0], f[1]);
                 if (IsPersonal(def)) continue;
                 if (Set(Id(def), f[2])) n++;
             }
             Plugin.Log.LogInfo($"Using the host's settings ({n} values).");
+            NoteHostVersion(hostVersion);
         }
         catch (Exception ex) { Plugin.Log.LogError($"Host settings (receive): {ex.Message}"); }
+    }
+
+    // The host's game decides where things spawn, so an older copy on the host means older behaviour for everyone.
+    private static void NoteHostVersion(string v)
+    {
+        try
+        {
+            if (v == null) { Plugin.Log.LogWarning($"The host has an older {Plugin.Name} (before 0.9.14) than yours ({Plugin.Version}): where things spawn follows the host's copy. Ask them to update."); return; }
+            if (System.Version.TryParse(v, out var host) && System.Version.TryParse(Plugin.Version, out var mine) && host < mine)
+                Plugin.Log.LogWarning($"The host has {Plugin.Name} {v}, older than yours ({Plugin.Version}): where things spawn follows the host's copy. Ask them to update.");
+            else Plugin.Log.LogInfo($"The host has {Plugin.Name} {v}.");
+        }
+        catch { }
     }
 
     private static void Begin()

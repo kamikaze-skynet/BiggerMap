@@ -65,6 +65,18 @@ internal static class Floor
         catch (Exception ex) { Plugin.Log.LogWarning($"Spawn spot: {ex.Message}"); }
     }
 
+    [HarmonyPatch(typeof(NetworkSpawnManager), nameof(NetworkSpawnManager.InstantiateAndSpawn))]
+    [HarmonyPostfix]
+    private static void Spawn_Postfix(NetworkObject networkPrefab, bool isPlayerObject, NetworkObject __result)
+    {
+        try
+        {
+            if (isPlayerObject || networkPrefab == null || __result == null || !Active()) return;
+            if (KindOf(networkPrefab) == Kind.Ground) Keep(__result);
+        }
+        catch { }
+    }
+
     /// <summary>Things that live on the ground. Projectiles, attack effects, pings and the like are left alone.</summary>
     private static Kind KindOf(NetworkObject prefab)
     {
@@ -74,16 +86,17 @@ internal static class Floor
         try
         {
             var go = prefab.gameObject;
-            if (go.GetComponent<Enemy>() != null
-                || go.GetComponent<HerdingTarget>() != null
-                || go.GetComponent<PetrifiedEnemy>() != null
-                || go.GetComponent<Collectable>() != null
-                || go.GetComponent<PushObjectivePushable>() != null
-                || go.GetComponent<CapturePoint>() != null
-                || go.GetComponent<HealthPickup>() != null
-                || go.GetComponent<MagnetPickup>() != null
-                || go.GetComponent<ArtifactChestWithPickup>() != null
-                || go.GetComponent(Il2CppType.Of<IPickup>()) != null)
+            if (go.GetComponentInChildren<Enemy>(true) != null
+                || go.GetComponentInChildren<EnemyNavigationController>(true) != null
+                || go.GetComponentInChildren<HerdingTarget>(true) != null
+                || go.GetComponentInChildren<PetrifiedEnemy>(true) != null
+                || go.GetComponentInChildren<Collectable>(true) != null
+                || go.GetComponentInChildren<PushObjectivePushable>(true) != null
+                || go.GetComponentInChildren<CapturePoint>(true) != null
+                || go.GetComponentInChildren<HealthPickup>(true) != null
+                || go.GetComponentInChildren<MagnetPickup>(true) != null
+                || go.GetComponentInChildren<ArtifactChestWithPickup>(true) != null
+                || go.GetComponentInChildren(Il2CppType.Of<IPickup>(), true) != null)
                 k = Kind.Ground;
         }
         catch { }
@@ -148,59 +161,119 @@ internal static class Floor
         return true;
     }
 
-    // ---------- spell cores pushed up onto rocks ----------
-    // The cores of the push objective roll on physics: a hard shove into a rock can leave one on top, where nobody
-    // can reach it to push it on. Whoever's game moves the core (its owner) brings it back down to the nearest floor
-    // spot once it has sat up there for a few seconds.
+    // ---------- keeping things on the floor after they've spawned ----------
+    // A spot can still go wrong later: physics can throw a spell core onto a rock, a knock-back can push an enemy
+    // where it can't walk back from, a pickup can drop where an enemy died. Everything spawned on the ground is
+    // watched by whichever game moves it (the host, or a player who's pushing a core), and anything that has been up
+    // on a rock or past the edge for a few seconds is put back on the nearest floor spot.
 
-    private static readonly List<PushObjectivePushable> cores = new();
-    private static readonly Dictionary<IntPtr, float> strandedSince = new();
-    private static float nextRescue;
+    private sealed class Kept
+    {
+        public NetworkObject Obj;
+        public EnemyNavigationController Nav;
+        public int Strikes;
+    }
 
+    private static readonly List<Kept> kept = new();
+    private static readonly HashSet<IntPtr> keptPtrs = new();
+    private static int cursor;
+    private static float nextKeep;
+
+    private static void Keep(NetworkObject o)
+    {
+        if (o == null || !keptPtrs.Add(o.Pointer)) return;
+        EnemyNavigationController nav = null;
+        try { nav = o.GetComponentInChildren<EnemyNavigationController>(true); } catch { }
+        kept.Add(new Kept { Obj = o, Nav = nav });
+    }
+
+    // Players' games don't see the host's spawns, but a player can be the one moving a spell core.
     [HarmonyPatch(typeof(PushObjectivePushable), nameof(PushObjectivePushable.OnNetworkSpawn))]
     [HarmonyPostfix]
     private static void Core_Spawn(PushObjectivePushable __instance)
     {
-        try { if (__instance != null && !cores.Exists(c => c.Pointer == __instance.Pointer)) cores.Add(__instance); } catch { }
+        try { if (__instance != null) Keep(__instance.NetworkObject); } catch { }
     }
 
-    /// <summary>Every frame (cheap: looks once a second while there are cores).</summary>
+    /// <summary>Every frame (cheap): a few tracked things are looked at every quarter of a second.</summary>
     internal static void Tick()
     {
-        if (cores.Count == 0 || Time.unscaledTime < nextRescue) return;
-        nextRescue = Time.unscaledTime + 1f;
+        if (kept.Count == 0 || Time.unscaledTime < nextKeep) return;
+        nextKeep = Time.unscaledTime + 0.25f;
         bool active = Active();
-        for (int i = cores.Count - 1; i >= 0; i--)
+        int budget = Math.Min(kept.Count, 40);
+        for (int n = 0; n < budget && kept.Count > 0; n++)
         {
-            var c = cores[i];
+            if (cursor >= kept.Count) cursor = 0;
+            var k = kept[cursor];
             try
             {
-                if (c is null || c.WasCollected || c == null || !c.IsSpawned) { cores.RemoveAt(i); continue; }
-                if (!active || !c.IsOwner) { strandedSince.Remove(c.Pointer); continue; }
-                var pos = c.transform.position;
-                if (!Stranded(pos)) { strandedSince.Remove(c.Pointer); continue; }
-                if (!strandedSince.TryGetValue(c.Pointer, out var since)) { strandedSince[c.Pointer] = Time.unscaledTime; continue; }
-                if (Time.unscaledTime - since < 3f) continue;
-                strandedSince.Remove(c.Pointer);
-                var spot = Spot(pos) + Vector3.up * 0.8f;
-                var rb = c.rigidBody;
-                if (rb != null)
-                {
-                    rb.linearVelocity = Vector3.zero;
-                    rb.angularVelocity = Vector3.zero;
-                    rb.position = spot;
-                }
-                c.transform.position = spot;
-                Plugin.Log.LogInfo($"Brought a spell core down from the rocks ({pos.x:0}, {pos.y:0.#}, {pos.z:0}) -> ({spot.x:0}, {spot.y:0.#}, {spot.z:0}).");
+                var o = k.Obj;
+                if (o is null || o.WasCollected || o == null || !o.IsSpawned) { keptPtrs.Remove(k.Obj?.Pointer ?? IntPtr.Zero); kept.RemoveAt(cursor); continue; }
+                cursor++;
+                if (!active || !o.IsOwner) { k.Strikes = 0; continue; }
+                Vector3 pos = o.transform.position;
+                if (k.Nav != null && !k.Nav.WasCollected) try { pos = k.Nav.GetNavigatorPosition(); } catch { }
+                if (!Stranded(pos)) { k.Strikes = 0; continue; }
+                // Seen up there three times in a row (a second or more) before anything is moved: things fly through
+                // the air for a moment when knocked about.
+                if (++k.Strikes < 3) continue;
+                k.Strikes = 0;
+                Bring(k, pos);
             }
-            catch (Exception ex) { Plugin.Log.LogWarning($"Spell core check: {ex.Message}"); cores.RemoveAt(i); }
+            catch (Exception ex) { Plugin.Log.LogWarning($"Keeping things on the floor: {ex.Message}"); keptPtrs.Remove(k.Obj?.Pointer ?? IntPtr.Zero); kept.Remove(k); }
+        }
+    }
+
+    private static int brought;
+    private static float nextBroughtLog;
+
+    private static void Bring(Kept k, Vector3 from)
+    {
+        var o = k.Obj;
+        var spot = Spot(from);
+        if ((spot - from).sqrMagnitude < 0.25f) return; // nowhere better found
+        bool moved = false;
+        // Enemies walk with a separate navigation agent; their body follows it.
+        if (k.Nav != null && !k.Nav.WasCollected)
+        {
+            try
+            {
+                var t = k.Nav.GetNavigator()?.GetTransform();
+                var agent = t != null ? t.GetComponent<NavMeshAgent>() : null;
+                if (agent != null) { agent.Warp(spot); moved = true; }
+            }
+            catch { }
+        }
+        else
+        {
+            try { var agent = o.GetComponentInChildren<NavMeshAgent>(); if (agent != null && agent.enabled) { agent.Warp(spot); moved = true; } } catch { }
+        }
+        var lift = o.GetComponentInChildren<PushObjectivePushable>() != null ? 0.8f : 0f;
+        try
+        {
+            var rb = o.GetComponentInChildren<Rigidbody>();
+            if (rb != null && !rb.isKinematic)
+            {
+                rb.linearVelocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
+                rb.position = spot + Vector3.up * lift;
+            }
+        }
+        catch { }
+        o.transform.position = spot + Vector3.up * lift;
+        brought++;
+        if (brought <= 10 || Time.unscaledTime >= nextBroughtLog)
+        {
+            nextBroughtLog = Time.unscaledTime + 30f;
+            Plugin.Log.LogInfo($"Brought {o.name} back onto the floor ({from.x:0}, {from.y:0.#}, {from.z:0}) -> ({spot.x:0}, {spot.y:0.#}, {spot.z:0}){(moved ? "" : " (no agent)")}. {brought} so far.");
         }
     }
 
     // Up on a rock or outside the edge: no floor close below it, or the floor under it is cut off from the arena.
     private static bool Stranded(Vector3 pos)
     {
-        if (!Wall.Inside(pos, 0.5f)) return true;
+        if (!Wall.Inside(pos, -1f)) return true; // pressed against the edge is fine; past it isn't
         if (!NavMesh.SamplePosition(pos, out var hit, 3f, NavMesh.AllAreas)) return true;
         if (pos.y - hit.position.y > 2.5f) return true;
         return !Connected(hit.position);

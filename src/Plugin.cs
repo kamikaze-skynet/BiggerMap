@@ -15,7 +15,7 @@ public class Plugin : BasePlugin
 {
     public const string Guid = "girthy_mods.BiggerMap";
     public const string Name = "BiggerMap";
-    public const string Version = "0.9.13";
+    public const string Version = "0.9.14";
 
     internal const float MaxScale = 1.8f; // past this the scenery leaves the realm's ground
 

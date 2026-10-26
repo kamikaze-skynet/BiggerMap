@@ -1,3 +1,8 @@
+## 0.9.14
+- **Everything is kept on the floor, not just placed there.** Enemies, the fungi, statues, spell cores and pickups are now watched after they spawn too. Anything that ends up on top of a rock or past the edge (a knock-back, a physics bounce, a bad event spot) and stays there for about a second is put back on the nearest floor spot. Enemies are moved with their navigation, so they walk on normally.
+- More things are recognised as "on the ground" (some enemies keep the parts the mod looks for on a child object, so they were skipped before).
+- The log now says which BiggerMap the host runs, and warns if it's older than yours: the host's game decides where things spawn, so the host needs the latest version for these fixes to work.
+
 ## 0.9.13
 - **Spell cores stuck on the rocks come back down.** The cores in "Secure the Unstable Spell Cores" roll on physics, and a hard push into a rock could leave one on top where nobody could reach it. A core that sits up on a rock (or past the edge) for a few seconds is now put back on the nearest floor spot.
 - **The line of enemies isn't squeezed into a column any more.** Spots of the line that fall outside the edge are left out instead of being moved inside, which had packed the line's ends into a dense column along the edge.

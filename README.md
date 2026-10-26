@@ -12,7 +12,7 @@ When a realm loads, its layout spreads out from the centre:
 
 **Everyone needs the mod.** The host's size is used for everyone: the host sends it to players every second, lobby included. If the host doesn't have the mod, the map stays normal for everyone.
 
-## Config (`girthy_mods.BiggerMap.cfg`)
+## Config (in your mod manager's config editor)
 
 | Setting | Default | What it does |
 |---|---|---|

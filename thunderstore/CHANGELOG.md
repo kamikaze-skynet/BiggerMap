@@ -1,3 +1,6 @@
+## 0.9.11
+- **Fix: the host's game crashed when a line or mob event started** (the row of dogs, the mob). 0.9.9 hooked the game's "start event" code to size those events for the bigger map, and that hook couldn't pass one of the game's values through correctly, so the game read bad memory and closed. The events are now sized without that hook: the line is stretched where its enemy positions are worked out, and the spawn distances are set on the events' settings directly.
+
 ## 0.9.10
 - Smoother: the extra objective time is now given when an objective starts, instead of searching the whole scene for objectives every second (that caused a small hitch each second).
 

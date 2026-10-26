@@ -33,46 +33,67 @@ internal static class Arena
         try { if (Active(out _) && !Wall.Inside(position, 2f)) position = Wall.Clamp(position, 3f); } catch { }
     }
 
-    // ---------- the line event (a row of enemies sweeping across the map) ----------
+    // ---------- the line event (a row of enemies sweeping across the map) and the mob event ----------
+    // Before 0.9.11 these hooked LineEnemyEventStarter/MobEnemyEventStarter.StartEvent(CancellationToken) and
+    // CalculateIntersectionPoints. The modding layer can't pass a CancellationToken (a small struct the game passes
+    // in a register) through a hook correctly, so the host crashed the moment either event started
+    // (AccessViolationException in StartEvent); the other hook returns a 24-byte struct, which is just as fragile.
+    // Now: the line is stretched where its spawn positions are worked out (only object and Vector3 arguments), and
+    // the events' spawn distances are set on their config assets directly, with no hook at all.
 
-    // The line is sized for a 100 x 100 m map (constants in the game): make it as wide as the bigger one.
-    [HarmonyPatch(typeof(LineEnemyEventStarter), nameof(LineEnemyEventStarter.CalculateIntersectionPoints))]
+    // The line is sized for a 100 x 100 m map (constants in the game): stretch it about its middle.
+    [HarmonyPatch(typeof(LineEnemyEventStarter), nameof(LineEnemyEventStarter.GetEnemySpawnPositions))]
     [HarmonyPrefix]
-    private static void LineSize_Prefix(ref float width, ref float height)
+    private static void LinePositions_Prefix(ref Vector3 lineStartPoint, ref Vector3 lineEndPoint)
     {
-        if (!Active(out float k)) return;
-        width *= k;
-        height *= k;
+        try
+        {
+            if (!Active(out float k)) return;
+            var mid = (lineStartPoint + lineEndPoint) * 0.5f;
+            lineStartPoint = mid + (lineStartPoint - mid) * k;
+            lineEndPoint = mid + (lineEndPoint - mid) * k;
+        }
+        catch { }
     }
 
     private static readonly Dictionary<IntPtr, float> lineDistance = new(), mobDistance = new();
+    private static float configsAppliedFor = 1f, nextConfigLook, lookingFor = -1f;
+    private static int looks;
 
-    [HarmonyPatch(typeof(LineEnemyEventStarter), nameof(LineEnemyEventStarter.StartEvent))]
-    [HarmonyPrefix]
-    private static void LineStart_Prefix(LineEnemyEventStarter __instance)
+    /// <summary>Every frame (cheap): keeps the events' spawn distances in step with the map size. The configs are
+    /// found with a scene-wide search, so that only runs when the size changes (a few tries while the run loads).</summary>
+    internal static void Tick()
     {
+        float k = Active(out float kk) ? kk : 1f;
+        if (Mathf.Abs(k - configsAppliedFor) < 0.001f) return;
+        if (Mathf.Abs(k - lookingFor) > 0.001f) { lookingFor = k; looks = 0; nextConfigLook = 0f; }
+        if (looks >= 5 || Time.unscaledTime < nextConfigLook) return;
+        looks++;
+        nextConfigLook = Time.unscaledTime + 4f;
+        int found = 0;
         try
         {
-            var c = __instance.config;
-            if (c == null) return;
-            if (!lineDistance.TryGetValue(c.Pointer, out var orig)) lineDistance[c.Pointer] = orig = c.SpawnDistanceFromCenter;
-            c.SpawnDistanceFromCenter = orig * (Active(out float k) ? k : 1f);
+            foreach (var o in Resources.FindObjectsOfTypeAll(Il2CppInterop.Runtime.Il2CppType.Of<LineEnemyEventStarterConfiguration>()))
+            {
+                var c = o?.TryCast<LineEnemyEventStarterConfiguration>();
+                if (c == null) continue;
+                if (!lineDistance.TryGetValue(c.Pointer, out var orig)) lineDistance[c.Pointer] = orig = c.SpawnDistanceFromCenter;
+                c.SpawnDistanceFromCenter = orig * k;
+                found++;
+            }
+            foreach (var o in Resources.FindObjectsOfTypeAll(Il2CppInterop.Runtime.Il2CppType.Of<MobEnemyEventStarterConfiguration>()))
+            {
+                var c = o?.TryCast<MobEnemyEventStarterConfiguration>();
+                if (c == null) continue;
+                if (!mobDistance.TryGetValue(c.Pointer, out var orig)) mobDistance[c.Pointer] = orig = c.SpawnDistanceFromCenter;
+                c.SpawnDistanceFromCenter = orig * k;
+                found++;
+            }
         }
-        catch (Exception ex) { Plugin.Log.LogWarning($"Line event size: {ex.Message}"); }
-    }
-
-    [HarmonyPatch(typeof(MobEnemyEventStarter), nameof(MobEnemyEventStarter.StartEvent))]
-    [HarmonyPrefix]
-    private static void MobStart_Prefix(MobEnemyEventStarter __instance)
-    {
-        try
-        {
-            var c = __instance.config;
-            if (c == null) return;
-            if (!mobDistance.TryGetValue(c.Pointer, out var orig)) mobDistance[c.Pointer] = orig = c.SpawnDistanceFromCenter;
-            c.SpawnDistanceFromCenter = orig * (Active(out float k) ? k : 1f);
-        }
-        catch (Exception ex) { Plugin.Log.LogWarning($"Mob event size: {ex.Message}"); }
+        catch (Exception ex) { Plugin.Log.LogWarning($"Event sizes: {ex.Message}"); return; }
+        if (found < 2 && looks < 5) return; // not loaded yet (they load with the run): look again in a few seconds
+        configsAppliedFor = k;
+        Plugin.Log.LogInfo($"Line and mob events sized for the map (x{k:0.##}).");
     }
 
     // ---------- objective time ----------
@@ -98,5 +119,4 @@ internal static class Arena
         catch (Exception ex) { Plugin.Log.LogWarning($"Objective time: {ex.Message}"); }
     }
 
-    internal static void Tick() { }
 }

@@ -30,7 +30,7 @@ internal static class Arena
     [HarmonyPriority(Priority.First)]
     private static void SpawnEnemy_Prefix(ref Vector3 position)
     {
-        try { if (Active(out _) && !Wall.Inside(position, 2f)) position = Wall.Clamp(position, 3f); } catch { }
+        try { if (Active(out _)) position = Floor.Spot(position); } catch { }
     }
 
     // ---------- the line event (a row of enemies sweeping across the map) and the mob event ----------

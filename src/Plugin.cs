@@ -15,7 +15,7 @@ public class Plugin : BasePlugin
 {
     public const string Guid = "girthy_mods.BiggerMap";
     public const string Name = "BiggerMap";
-    public const string Version = "0.9.11";
+    public const string Version = "0.9.12";
 
     internal const float MaxScale = 1.8f; // past this the scenery leaves the realm's ground
 
@@ -56,6 +56,7 @@ public class Plugin : BasePlugin
         harmony.PatchAll(typeof(MapScaler));
         harmony.PatchAll(typeof(GridMap));
         try { harmony.PatchAll(typeof(Arena)); } catch (System.Exception ex) { Log.LogError($"Failed to apply the spawn and event fixes: {ex.Message}"); }
+        try { harmony.PatchAll(typeof(Floor)); } catch (System.Exception ex) { Log.LogError($"Failed to apply the spawn-spot fix: {ex.Message}"); }
         AddComponent<Runner>();
         Log.LogInfo($"{Name} {Version} ready.");
     }

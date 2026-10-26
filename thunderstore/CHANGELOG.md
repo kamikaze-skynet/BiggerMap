@@ -1,3 +1,6 @@
+## 0.9.12
+- **Enemies, event items and pickups land on the arena floor.** Several of the game's events place enemies by distance alone (the mob, the converging circle, the line of dogs), so in the bigger map some came up on top of the border rocks or outside the edge. Everything that lives on the ground (enemies, the fungi, the statues, pickups) is now checked as it spawns: a spot outside the edge, or on a rock that has no way down to the floor, is moved to the nearest floor spot.
+
 ## 0.9.11
 - **Fix: the host's game crashed when a line or mob event started** (the row of dogs, the mob). 0.9.9 hooked the game's "start event" code to size those events for the bigger map, and that hook couldn't pass one of the game's values through correctly, so the game read bad memory and closed. The events are now sized without that hook: the line is stretched where its enemy positions are worked out, and the spawn distances are set on the events' settings directly.
 

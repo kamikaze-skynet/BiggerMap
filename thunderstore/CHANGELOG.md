@@ -1,3 +1,8 @@
+## 0.9.13
+- **Spell cores stuck on the rocks come back down.** The cores in "Secure the Unstable Spell Cores" roll on physics, and a hard push into a rock could leave one on top where nobody could reach it. A core that sits up on a rock (or past the edge) for a few seconds is now put back on the nearest floor spot.
+- **The line of enemies isn't squeezed into a column any more.** Spots of the line that fall outside the edge are left out instead of being moved inside, which had packed the line's ends into a dense column along the edge.
+- Spawns that land on a tall rock now find the floor below them (the search looked at the rock's height and could miss the floor).
+
 ## 0.9.12
 - **Enemies, event items and pickups land on the arena floor.** Several of the game's events place enemies by distance alone (the mob, the converging circle, the line of dogs), so in the bigger map some came up on top of the border rocks or outside the edge. Everything that lives on the ground (enemies, the fungi, the statues, pickups) is now checked as it spawns: a spot outside the edge, or on a rock that has no way down to the floor, is moved to the nearest floor spot.
 

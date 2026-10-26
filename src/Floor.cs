@@ -97,6 +97,9 @@ internal static class Floor
     {
         var q = Wall.Inside(p, 1.5f) ? p : Wall.Clamp(p, 3f);
         if (OnFloor(q, out var f)) return f;
+        // Search at floor height: a spot on a tall rock is further above the floor than the navigation sample reaches.
+        if (EnsureMiddle()) q.y = middle.y;
+        if (OnFloor(q, out f)) return f;
         for (int ring = 1; ring <= 3; ring++)
             for (int a = 0; a < 8; a++)
             {
@@ -129,16 +132,78 @@ internal static class Floor
     {
         long key = ((long)Mathf.RoundToInt(p.x / 2f) & 0xFFFFF) | (((long)Mathf.RoundToInt(p.z / 2f) & 0xFFFFF) << 20) | (((long)Mathf.RoundToInt(p.y / 1.5f) & 0xFFFFF) << 40);
         if (connected.TryGetValue(key, out var ok)) return ok;
-        if (!haveMiddle)
-        {
-            if (!NavMesh.SamplePosition(Wall.Centre, out var mid, 25f, NavMesh.AllAreas)) return true; // can't tell: don't move things
-            middle = mid.position;
-            haveMiddle = true;
-        }
+        if (!EnsureMiddle()) return true; // can't tell: don't move things
         // Without a path check (see PathToMiddle), a rock top is told apart by height alone.
         if (!PathToMiddle(p, out ok)) ok = p.y <= middle.y + 1.5f;
         connected[key] = ok;
         return ok;
+    }
+
+    private static bool EnsureMiddle()
+    {
+        if (haveMiddle) return true;
+        if (!NavMesh.SamplePosition(Wall.Centre, out var mid, 25f, NavMesh.AllAreas)) return false;
+        middle = mid.position;
+        haveMiddle = true;
+        return true;
+    }
+
+    // ---------- spell cores pushed up onto rocks ----------
+    // The cores of the push objective roll on physics: a hard shove into a rock can leave one on top, where nobody
+    // can reach it to push it on. Whoever's game moves the core (its owner) brings it back down to the nearest floor
+    // spot once it has sat up there for a few seconds.
+
+    private static readonly List<PushObjectivePushable> cores = new();
+    private static readonly Dictionary<IntPtr, float> strandedSince = new();
+    private static float nextRescue;
+
+    [HarmonyPatch(typeof(PushObjectivePushable), nameof(PushObjectivePushable.OnNetworkSpawn))]
+    [HarmonyPostfix]
+    private static void Core_Spawn(PushObjectivePushable __instance)
+    {
+        try { if (__instance != null && !cores.Exists(c => c.Pointer == __instance.Pointer)) cores.Add(__instance); } catch { }
+    }
+
+    /// <summary>Every frame (cheap: looks once a second while there are cores).</summary>
+    internal static void Tick()
+    {
+        if (cores.Count == 0 || Time.unscaledTime < nextRescue) return;
+        nextRescue = Time.unscaledTime + 1f;
+        bool active = Active();
+        for (int i = cores.Count - 1; i >= 0; i--)
+        {
+            var c = cores[i];
+            try
+            {
+                if (c is null || c.WasCollected || c == null || !c.IsSpawned) { cores.RemoveAt(i); continue; }
+                if (!active || !c.IsOwner) { strandedSince.Remove(c.Pointer); continue; }
+                var pos = c.transform.position;
+                if (!Stranded(pos)) { strandedSince.Remove(c.Pointer); continue; }
+                if (!strandedSince.TryGetValue(c.Pointer, out var since)) { strandedSince[c.Pointer] = Time.unscaledTime; continue; }
+                if (Time.unscaledTime - since < 3f) continue;
+                strandedSince.Remove(c.Pointer);
+                var spot = Spot(pos) + Vector3.up * 0.8f;
+                var rb = c.rigidBody;
+                if (rb != null)
+                {
+                    rb.linearVelocity = Vector3.zero;
+                    rb.angularVelocity = Vector3.zero;
+                    rb.position = spot;
+                }
+                c.transform.position = spot;
+                Plugin.Log.LogInfo($"Brought a spell core down from the rocks ({pos.x:0}, {pos.y:0.#}, {pos.z:0}) -> ({spot.x:0}, {spot.y:0.#}, {spot.z:0}).");
+            }
+            catch (Exception ex) { Plugin.Log.LogWarning($"Spell core check: {ex.Message}"); cores.RemoveAt(i); }
+        }
+    }
+
+    // Up on a rock or outside the edge: no floor close below it, or the floor under it is cut off from the arena.
+    private static bool Stranded(Vector3 pos)
+    {
+        if (!Wall.Inside(pos, 0.5f)) return true;
+        if (!NavMesh.SamplePosition(pos, out var hit, 3f, NavMesh.AllAreas)) return true;
+        if (pos.y - hit.position.y > 2.5f) return true;
+        return !Connected(hit.position);
     }
 
     // The game build has no NavMeshPath constructor (stripped), so the path object is made and queried through the

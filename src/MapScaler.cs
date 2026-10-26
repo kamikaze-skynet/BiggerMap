@@ -440,6 +440,7 @@ public class Runner : MonoBehaviour
     {
         Sync.Tick();
         try { Arena.Tick(); } catch { }
+        try { Floor.Tick(); } catch { }
         if (waiting is not null)
         {
             if (waiting.WasCollected || waiting == null) waiting = null;

@@ -56,6 +56,23 @@ internal static class Arena
         catch { }
     }
 
+    // Spots of the line that fall outside the edge are left out. (Moving them inside squeezed the line's ends into a
+    // dense column along the edge.)
+    [HarmonyPatch(typeof(LineEnemyEventStarter), nameof(LineEnemyEventStarter.GetEnemySpawnPositions))]
+    [HarmonyPostfix]
+    private static void LinePositions_Postfix(Il2CppSystem.Collections.Generic.List<Vector3> __result)
+    {
+        try
+        {
+            if (__result == null || !Active(out _)) return;
+            int before = __result.Count, dropped = 0;
+            for (int i = __result.Count - 1; i >= 0; i--)
+                if (!Wall.Inside(__result[i], 2f)) { __result.RemoveAt(i); dropped++; }
+            if (dropped > 0) Plugin.Log.LogInfo($"Line event: {before - dropped} of {before} enemies inside the edge ({dropped} past it left out).");
+        }
+        catch (Exception ex) { Plugin.Log.LogWarning($"Line event spots: {ex.Message}"); }
+    }
+
     private static readonly Dictionary<IntPtr, float> lineDistance = new(), mobDistance = new();
     private static float configsAppliedFor = 1f, nextConfigLook, lookingFor = -1f;
     private static int looks;
